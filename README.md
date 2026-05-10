@@ -1,6 +1,6 @@
-# Agente Cuadrito: Agent_NiVasCor2
+# Agente Cuadrito: Agent_NiVasCor
 
-Este archivo contiene la implementación de `Agent_NiVasCor2`, un agente inteligente desarrollado en JavaScript para jugar "Cuadrito" (Dots and Boxes). Está optimizado para un entorno con mecánicas de auto-captura en cadena y un límite de tiempo global estricto.
+Este archivo contiene la implementación de `Agent_NiVasCor`, un agente inteligente desarrollado en JavaScript para jugar "Cuadrito" (Dots and Boxes). Está optimizado para un entorno con mecánicas de auto-captura en cadena y un límite de tiempo global estricto.
 
 ## 👥 Miembros del Equipo
 

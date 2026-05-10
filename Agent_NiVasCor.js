@@ -1,4 +1,4 @@
-class Agent_NiVasCor2 extends Agent {
+class Agent_NiVasCor extends Agent {
     constructor() {
         super();
     }
@@ -47,7 +47,7 @@ class Agent_NiVasCor2 extends Agent {
                 count++;
                 let v = board[r][c];
                 if (v < 0) continue; // Ya está cerrada, ignorar
-                
+
                 // Revisamos conexiones hacia donde NO hay pared
                 if (!(v & 1) && r > 0) q.push([r - 1, c]);
                 if (!(v & 2) && c < this.size - 1) q.push([r, c + 1]);
@@ -91,11 +91,11 @@ class Agent_NiVasCor2 extends Agent {
             // Si al poner la línea, la celda actual (que ya tiene 2 lados) pasa a 3, es un regalo inminente
             if (sides1 === 2 || sides2 === 2) {
                 risky.push(m);
-            } 
+            }
             // Si la celda pasa de 1 a 2 lados (se vuelve riesgosa a futuro)
             else if (sides1 === 1 || sides2 === 1) {
                 safe1.push(m);
-            } 
+            }
             // Movimiento completamente inofensivo
             else {
                 safe0.push(m);
@@ -122,25 +122,25 @@ class Agent_NiVasCor2 extends Agent {
         for (let i = 0; i < risky.length; i++) {
             let m = risky[i];
             let chainSize = 0;
-            
+
             // Medimos la cadena desde la celda actual
             if (this.sidesCount(board, m[0], m[1]) === 2) {
                 chainSize = Math.max(chainSize, this.chainLength(board, m[0], m[1]));
             }
-            
+
             // Medimos desde el vecino
             let n = this.getNeighbor(m[0], m[1], m[2]);
             if (n && this.sidesCount(board, n[0], n[1]) === 2) {
                 chainSize = Math.max(chainSize, this.chainLength(board, n[0], n[1]));
             }
-            
+
             if (chainSize < minChain) {
                 minChain = chainSize;
                 bestRisky = m;
             }
-            
+
             // Optimización: Si la cadena es de tamaño 1 (solo regalamos 1 cuadro), no se puede mejorar.
-            if (minChain <= 1) break; 
+            if (minChain <= 1) break;
         }
 
         return bestRisky;
