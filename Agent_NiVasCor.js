@@ -1,148 +1,144 @@
 class Agent_NiVasCor extends Agent {
-    constructor() {
+    constructor(maxDepth = 3) {
         super();
+        this.ops = new Board();
+        this.maxDepth = maxDepth;
     }
 
     init(color, board, time = 20000) {
         super.init(color, board, time);
-        this.size = board.length;
+        this.ply = color === "R" ? -1 : -2;
+        this.opp = color === "R" ? -2 : -1;
     }
 
-    // Cuenta cuántos lados tiene dibujados una celda (de 0 a 4)
-    sidesCount(board, i, j) {
-        // Si sale de los límites o ya fue capturada, consideramos que tiene 4 lados
-        if (i < 0 || i >= this.size || j < 0 || j >= this.size || board[i][j] < 0) return 4;
-        let v = board[i][j], c = 0;
-        if (v & 1) c++; // Arriba
-        if (v & 2) c++; // Derecha
-        if (v & 4) c++; // Abajo
-        if (v & 8) c++; // Izquierda
-        return c;
+    cloneBoard(b) {
+        return this.ops.clone(b);
     }
 
-    // Obtiene las coordenadas del vecino con el que se comparte la línea 's'
-    getNeighbor(i, j, s) {
-        if (s === 0 && i > 0) return [i - 1, j];
-        if (s === 1 && j < this.size - 1) return [i, j + 1];
-        if (s === 2 && i < this.size - 1) return [i + 1, j];
-        if (s === 3 && j > 0) return [i, j - 1];
-        return null;
-    }
-
-    // Búsqueda ultrarrápida (DFS) para contar el tamaño de una cadena de cuadros.
-    // Esto evita usar el costoso clone().
-    chainLength(board, startR, startC) {
-        let visited = new Set();
-        let q = [[startR, startC]];
-        let count = 0;
-
-        while (q.length > 0) {
-            let [r, c] = q.pop();
-            let key = r + "," + c;
-            if (visited.has(key)) continue;
-            visited.add(key);
-
-            // Si es una celda que está a punto de ser capturada (tiene 2 o más lados)
-            if (this.sidesCount(board, r, c) >= 2) {
-                count++;
-                let v = board[r][c];
-                if (v < 0) continue; // Ya está cerrada, ignorar
-
-                // Revisamos conexiones hacia donde NO hay pared
-                if (!(v & 1) && r > 0) q.push([r - 1, c]);
-                if (!(v & 2) && c < this.size - 1) q.push([r, c + 1]);
-                if (!(v & 4) && r < this.size - 1) q.push([r + 1, c]);
-                if (!(v & 8) && c > 0) q.push([r, c - 1]);
+    countThreeSides(b) {
+        let n = 0;
+        for (let i = 0; i < b.length; i++)
+            for (let j = 0; j < b.length; j++) {
+                const v = b[i][j];
+                if (v >= 0) {
+                    const bits =
+                        ((v & 1) ? 1 : 0) +
+                        ((v & 2) ? 1 : 0) +
+                        ((v & 4) ? 1 : 0) +
+                        ((v & 8) ? 1 : 0);
+                    if (bits === 3) n++;
+                }
             }
-        }
-        return count;
+        return n;
     }
 
-    compute(board, time) {
-        let moves = [];
-        // 1. Encontrar todos los movimientos válidos (más rápido que llamar b.valid_moves)
-        for (let i = 0; i < this.size; i++) {
-            for (let j = 0; j < this.size; j++) {
-                if (board[i][j] >= 0) {
-                    for (let s = 0; s < 4; s++) {
-                        if ((board[i][j] & (1 << s)) === 0) {
-                            moves.push([i, j, s]);
-                        }
-                    }
+    evaluate(before, after) {
+        let myGain = 0, oppGain = 0, risk = 0, chain = 0;
+        const size = after.length;
+
+        for (let i = 0; i < size; i++) {
+            for (let j = 0; j < size; j++) {
+                const val = after[i][j];
+                if (val === this.ply) myGain++;
+                else if (val === this.opp) oppGain++;
+                else if (val >= 0) {
+                    const bits =
+                        ((val & 1) ? 1 : 0) +
+                        ((val & 2) ? 1 : 0) +
+                        ((val & 4) ? 1 : 0) +
+                        ((val & 8) ? 1 : 0);
+                    if (bits === 3) risk++;
+                    if (bits === 2) chain++;
                 }
             }
         }
 
+
+        return (
+            1000 * (myGain - oppGain) +
+            12 * chain -
+            8 * risk
+        );
+    }
+
+    minimax(board, depth, alpha, beta, maximizing, maxDepth) {
+        if (depth >= maxDepth) return this.evaluate(this.initialBoard, board);
+        const moves = this.ops.valid_moves(board);
+        if (moves.length === 0) return this.evaluate(this.initialBoard, board);
+
+        let sampleMoves = moves;
+        if (moves.length > 80) {
+            sampleMoves = [];
+            for (let i = 0; i < 30; i++) {
+                const idx = Math.floor(Math.random() * moves.length);
+                sampleMoves.push(moves[idx]);
+            }
+        }
+
+        if (maximizing) {
+            let best = -Infinity;
+            for (const [i, j, s] of sampleMoves) {
+                const b2 = this.cloneBoard(board);
+                const ok = this.ops.move(b2, i, j, s, this.ply);
+                if (!ok) continue;
+                const val = this.minimax(b2, depth + 1, alpha, beta, false, maxDepth);
+                best = Math.max(best, val);
+                alpha = Math.max(alpha, val);
+                if (beta <= alpha) break;
+            }
+            return best;
+        }
+        else {
+            let best = Infinity;
+            for (const [i, j, s] of sampleMoves) {
+                const b2 = this.cloneBoard(board);
+                const ok = this.ops.move(b2, i, j, s, this.opp);
+                if (!ok) continue;
+                const val = this.minimax(b2, depth + 1, alpha, beta, true, maxDepth);
+                best = Math.min(best, val);
+                beta = Math.min(beta, val);
+                if (beta <= alpha) break;
+            }
+            return best;
+        }
+    }
+
+    compute(board, time) {
+        this.initialBoard = this.cloneBoard(board);
+        const moves = this.ops.valid_moves(board);
         if (moves.length === 0) return [0, 0, 0];
 
-        let safe0 = []; // Excelente: No crea celdas de 2 lados (evita armar trampas)
-        let safe1 = []; // Aceptable: Crea celdas de 2 lados, pero no regala nada aún
-        let risky = []; // Peligroso: Vuelve una celda de 2 en 3 (le regala el cuadro al rival)
 
-        // 2. Clasificar cada movimiento lógicamente evaluando sus paredes locales
-        for (let i = 0; i < moves.length; i++) {
-            let m = moves[i];
-            let r = m[0], c = m[1], s = m[2];
-            let neighbor = this.getNeighbor(r, c, s);
+        const size = board.length;
+        let maxDepth = 3;
+        if (size >= 10) maxDepth = 2;
+        if (size >= 15) maxDepth = 1;
 
-            let sides1 = this.sidesCount(board, r, c);
-            let sides2 = neighbor ? this.sidesCount(board, neighbor[0], neighbor[1]) : 0;
-
-            // Si al poner la línea, la celda actual (que ya tiene 2 lados) pasa a 3, es un regalo inminente
-            if (sides1 === 2 || sides2 === 2) {
-                risky.push(m);
-            }
-            // Si la celda pasa de 1 a 2 lados (se vuelve riesgosa a futuro)
-            else if (sides1 === 1 || sides2 === 1) {
-                safe1.push(m);
-            }
-            // Movimiento completamente inofensivo
-            else {
-                safe0.push(m);
+        let bestMove = moves[0];
+        let bestScore = -Infinity;
+        let sampleMoves = moves;
+        if (moves.length > 100) {
+            sampleMoves = [];
+            for (let i = 0; i < 40; i++) {
+                const idx = Math.floor(Math.random() * moves.length);
+                sampleMoves.push(moves[idx]);
             }
         }
 
-        // 3. Tomar decisión con prioridades estrictas
-
-        // Prioridad 1: Movimientos perfectos (Evitan iniciar cadenas)
-        if (safe0.length > 0) {
-            return safe0[Math.floor(Math.random() * safe0.length)];
+        for (const move of sampleMoves) {
+            const [i, j, s] = move;
+            const b2 = this.cloneBoard(board);
+            const ok = this.ops.move(b2, i, j, s, this.ply);
+            if (!ok) continue;
+            const val = this.minimax(b2, 1, -Infinity, Infinity, false, maxDepth);
+            if (val > bestScore) {
+                bestScore = val;
+                bestMove = move;
+            }
         }
 
-        // Prioridad 2: Movimientos seguros (No regalan cuadros todavía)
-        if (safe1.length > 0) {
-            return safe1[Math.floor(Math.random() * safe1.length)];
-        }
-
-        // Prioridad 3: Sacrificio inevitable (Fase final del juego)
-        // Ya no hay movimientos seguros. Toca regalar, pero regalaremos la cadena más pequeña.
-        let bestRisky = risky[0];
-        let minChain = Infinity;
-
-        for (let i = 0; i < risky.length; i++) {
-            let m = risky[i];
-            let chainSize = 0;
-
-            // Medimos la cadena desde la celda actual
-            if (this.sidesCount(board, m[0], m[1]) === 2) {
-                chainSize = Math.max(chainSize, this.chainLength(board, m[0], m[1]));
-            }
-
-            // Medimos desde el vecino
-            let n = this.getNeighbor(m[0], m[1], m[2]);
-            if (n && this.sidesCount(board, n[0], n[1]) === 2) {
-                chainSize = Math.max(chainSize, this.chainLength(board, n[0], n[1]));
-            }
-
-            if (chainSize < minChain) {
-                minChain = chainSize;
-                bestRisky = m;
-            }
-
-            // Optimización: Si la cadena es de tamaño 1 (solo regalamos 1 cuadro), no se puede mejorar.
-            if (minChain <= 1) break;
-        }
-
-        return bestRisky;
+        return bestMove;
     }
 }
+
+window.Agent_NiVasCor = Agent_NiVasCor;
